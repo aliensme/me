@@ -346,8 +346,9 @@ html,body{
  <div> 
  <div align="center" name="ALIEN"><span style="color:#9fc1ff;"><br /></span></div>
  <span style="text-align:center;color:#20badb;">
-<!-- GIF (ahora en el lugar que tenía el video, mismo tamaño: 150x100) -->
-<img width="150" style="height:auto;max-width:100%;" src="https://media3.giphy.com/media/v1.Y2lkPTc5MGI3NjExcm5uY3NrczFnbmN6bGoycnhuOWIzZ2M4b2szbTBkNmViMW9weGNiYyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/APbUwxDXUXc6oW8moi/giphy.gif" />
+<!-- GIF animado (se mueve solo con el video principal) + canvas con el fotograma congelado -->
+<img id="gif" width="150" style="height:auto;max-width:100%;" src="https://media3.giphy.com/media/v1.Y2lkPTc5MGI3NjExcm5uY3NrczFnbmN6bGoycnhuOWIzZ2M4b2szbTBkNmViMW9weGNiYyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/APbUwxDXUXc6oW8moi/giphy.gif" />
+<canvas id="gifFijo" style="display:none;width:150px;height:auto;max-width:100%;"></canvas>
 </span>
 </div>
 
@@ -386,8 +387,8 @@ html,body{
 <td style="border:0px;text-align:center;vertical-align:top" width="0" height="0" /> 
 
 <div><br /> 
-<!-- VIDEO (ahora en el lugar que tenía el gif, mismo tamaño: 660x470) -->
-<div><iframe id="visor" width="660" height="470" src="https://www.youtube.com/embed/fd3PJfv7SaY?autoplay=1" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
+<!-- VIDEO: empieza en mute para que el navegador permita el autoplay; se activa el sonido al primer clic -->
+<div><iframe id="visor" width="660" height="470" src="https://www.youtube.com/embed/fd3PJfv7SaY?autoplay=1&mute=1&playsinline=1&enablejsapi=1" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
 </div>
 </div>
 
@@ -415,10 +416,83 @@ html,body{
 </div>
 
 <script>
-function cargarVideo(id){
-  document.getElementById("visor").src="https://www.youtube.com/embed/"+id+"?autoplay=1";
+/* ---------- VIDEO + SONIDO ---------- */
+var VIDEO_PRINCIPAL = "fd3PJfv7SaY";
+var player = null;
+var playerListo = false;
+var sonidoDesbloqueado = false;
+
+// Cargar la API de YouTube
+(function(){
+  var s = document.createElement("script");
+  s.src = "https://www.youtube.com/iframe_api";
+  document.head.appendChild(s);
+})();
+
+function onYouTubeIframeAPIReady(){
+  player = new YT.Player("visor", {
+    events: {
+      onReady: function(){
+        playerListo = true;
+        player.playVideo();
+        if(sonidoDesbloqueado) activarSonido();
+      }
+    }
+  });
 }
 
+function activarSonido(){
+  if(playerListo){
+    player.unMute();
+    player.setVolume(100);
+  }
+}
+
+// Primer clic / toque / tecla en cualquier parte de la página: se activa el sonido
+function desbloquearSonido(){
+  if(sonidoDesbloqueado) return;
+  sonidoDesbloqueado = true;
+  activarSonido();
+  ["pointerdown","keydown","touchstart"].forEach(function(ev){
+    document.removeEventListener(ev, desbloquearSonido, true);
+  });
+}
+["pointerdown","keydown","touchstart"].forEach(function(ev){
+  document.addEventListener(ev, desbloquearSonido, true);
+});
+
+/* ---------- GIF (se mueve solo con el video principal) ---------- */
+function estadoGif(activo){
+  var im = document.getElementById("gif");
+  var cv = document.getElementById("gifFijo");
+
+  if(activo){
+    cv.style.display = "none";
+    im.style.display = "";
+    im.style.opacity = "1";
+  } else {
+    // copiar el fotograma actual antes de ocultar el GIF
+    cv.width  = im.naturalWidth;
+    cv.height = im.naturalHeight;
+    cv.getContext("2d").drawImage(im, 0, 0);
+    im.style.display = "none";
+    cv.style.display = "";
+    cv.style.opacity = "0.35";
+  }
+}
+
+/* ---------- BOTONES ---------- */
+function cargarVideo(id){
+  if(playerListo){
+    player.loadVideoById(id);
+  } else {
+    document.getElementById("visor").src =
+      "https://www.youtube.com/embed/" + id + "?autoplay=1&playsinline=1&enablejsapi=1";
+  }
+  estadoGif(id === VIDEO_PRINCIPAL);
+}
+
+/* ---------- ESCALA DE LA PÁGINA ---------- */
 function ajustar(){
   var e=document.getElementById("escala");
   e.style.transform="none";
