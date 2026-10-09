@@ -387,8 +387,8 @@ html,body{
 <td style="border:0px;text-align:center;vertical-align:top" width="0" height="0" /> 
 
 <div><br /> 
-<!-- VIDEO: empieza en mute para que el navegador permita el autoplay; se activa el sonido al primer clic -->
-<div><iframe id="visor" width="660" height="470" src="https://www.youtube.com/embed/fd3PJfv7SaY?autoplay=1&mute=1&playsinline=1&enablejsapi=1" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
+<!-- VIDEO: sin autoplay ni mute; se reproduce al hacerle clic y suena normal -->
+<div><iframe id="visor" width="660" height="470" src="https://www.youtube.com/embed/fd3PJfv7SaY?playsinline=1&enablejsapi=1" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
 </div>
 </div>
 
@@ -416,11 +416,14 @@ html,body{
 </div>
 
 <script>
-/* ---------- VIDEO + SONIDO ---------- */
+/* ---------- VIDEO ---------- */
 var VIDEO_PRINCIPAL = "fd3PJfv7SaY";
+var DEMORA_GIF = 5000;          // ms que tarda el GIF en moverse desde que el video empieza
 var player = null;
 var playerListo = false;
-var sonidoDesbloqueado = false;
+var videoActual = VIDEO_PRINCIPAL;
+var gifActivo = true;           // se congela al cargar la imagen (ver más abajo)
+var temporizadorGif = null;
 
 // Cargar la API de YouTube
 (function(){
@@ -432,64 +435,79 @@ var sonidoDesbloqueado = false;
 function onYouTubeIframeAPIReady(){
   player = new YT.Player("visor", {
     events: {
-      onReady: function(){
-        playerListo = true;
-        player.playVideo();
-        if(sonidoDesbloqueado) activarSonido();
-      }
+      onReady: function(){ playerListo = true; },
+      onStateChange: cambioEstado
     }
   });
 }
 
-function activarSonido(){
-  if(playerListo){
-    player.unMute();
-    player.setVolume(100);
+function cambioEstado(e){
+  // 1 = reproduciendo, 2 = pausa, 0 = terminado
+  if(e.data === 1 && videoActual === VIDEO_PRINCIPAL){
+    if(!gifActivo && !temporizadorGif){
+      temporizadorGif = setTimeout(function(){
+        temporizadorGif = null;
+        if(videoActual === VIDEO_PRINCIPAL && player.getPlayerState() === 1){
+          estadoGif(true);
+        }
+      }, DEMORA_GIF);
+    }
+  } else if(e.data === 2 || e.data === 0){
+    cancelarTemporizador();
   }
 }
 
-// Primer clic / toque / tecla en cualquier parte de la página: se activa el sonido
-function desbloquearSonido(){
-  if(sonidoDesbloqueado) return;
-  sonidoDesbloqueado = true;
-  activarSonido();
-  ["pointerdown","keydown","touchstart"].forEach(function(ev){
-    document.removeEventListener(ev, desbloquearSonido, true);
-  });
+function cancelarTemporizador(){
+  if(temporizadorGif){ clearTimeout(temporizadorGif); temporizadorGif = null; }
 }
-["pointerdown","keydown","touchstart"].forEach(function(ev){
-  document.addEventListener(ev, desbloquearSonido, true);
-});
 
 /* ---------- GIF (se mueve solo con el video principal) ---------- */
-function estadoGif(activo){
+function estadoGif(activo, opaco){
   var im = document.getElementById("gif");
   var cv = document.getElementById("gifFijo");
 
   if(activo){
+    gifActivo = true;
     cv.style.display = "none";
     im.style.display = "";
     im.style.opacity = "1";
-  } else {
-    // copiar el fotograma actual antes de ocultar el GIF
+    return;
+  }
+
+  // congelar: copiar el fotograma actual antes de ocultar el GIF (solo si estaba en movimiento)
+  if(gifActivo){
     cv.width  = im.naturalWidth;
     cv.height = im.naturalHeight;
     cv.getContext("2d").drawImage(im, 0, 0);
     im.style.display = "none";
     cv.style.display = "";
-    cv.style.opacity = "0.35";
+    gifActivo = false;
   }
+  // opaco solo en los demás videos; quieto sin opacidad en el principal
+  cv.style.opacity = opaco ? "0.35" : "1";
 }
+
+// Al abrir la página el GIF empieza quieto y SIN opacidad
+(function(){
+  var im = document.getElementById("gif");
+  function congelarInicial(){ estadoGif(false, false); }
+  if(im.complete && im.naturalWidth) congelarInicial();
+  else im.addEventListener("load", congelarInicial);
+})();
 
 /* ---------- BOTONES ---------- */
 function cargarVideo(id){
+  videoActual = id;
+  cancelarTemporizador();
   if(playerListo){
     player.loadVideoById(id);
   } else {
     document.getElementById("visor").src =
       "https://www.youtube.com/embed/" + id + "?autoplay=1&playsinline=1&enablejsapi=1";
   }
-  estadoGif(id === VIDEO_PRINCIPAL);
+  // el GIF se congela: opaco en los demás videos, sin opacidad en el principal
+  // (en el principal se vuelve a mover a los 5 s de que el video empiece)
+  estadoGif(false, id !== VIDEO_PRINCIPAL);
 }
 
 /* ---------- ESCALA DE LA PÁGINA ---------- */
