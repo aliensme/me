@@ -456,6 +456,9 @@ function onYouTubeIframeAPIReady(){
       },
       onStateChange: function(e){
         if(e.data === 1) actualizarGifPrincipal();   // 1 = reproduciendo
+        else if(e.data === 0 && videoActual === VIDEO_PRINCIPAL){
+          estadoGif(false);                          // 0 = terminó: el GIF se queda quieto
+        }
       }
     }
   });
