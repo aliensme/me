@@ -346,11 +346,10 @@ html,body{
  <div> 
  <div align="center" name="ALIEN"><span style="color:#9fc1ff;"><br /></span></div>
  <span style="text-align:center;color:#20badb;">
-<!-- GIF del video principal: oscuro y quieto hasta el seg. 5, lento hasta el 33, luego el GIF normal -->
+<!-- GIF del video principal: quieto y oscuro; se aclara hasta 60% entre el seg. 5 y el 33; en el 33 se mueve con brillo total -->
 <span id="gifPrincipal">
-<img id="gif" width="150" style="height:auto;max-width:100%;" src="https://xatimg.com/image/LvnYZg6sRxhv.gif" />
+<img id="gif" width="150" style="height:auto;max-width:100%;" src="https://xatimg.com/image/3bn669RzdnnZ.gif" />
 <canvas id="gifFijo" style="display:none;width:150px;height:auto;max-width:100%;"></canvas>
-<img id="gifRapido" width="150" style="display:none;height:auto;max-width:100%;" src="https://xatimg.com/image/3bn669RzdnnZ.gif" />
 </span>
 <!-- GIF para los otros videos (se llena desde GIFS_OTROS en el script; si está vacío no se muestra nada) -->
 <img id="gifOtro" width="150" style="display:none;height:auto;max-width:100%;" />
@@ -423,8 +422,9 @@ html,body{
 <script>
 /* ---------- CONFIGURACIÓN ---------- */
 var VIDEO_PRINCIPAL = "fd3PJfv7SaY";
-var DURACION_FADE = 33;   // segundos: el GIF se aclara hasta el 33 y ahí cambia al GIF normal
-var INICIO_MOVIMIENTO = 5; // segundos: el GIF lento empieza a moverse
+var INICIO_FADE = 5;          // segundo del video en que el GIF empieza a aclararse
+var INICIO_MOVIMIENTO = 33;   // segundo en que el GIF se mueve y el brillo pasa de golpe a 100%
+var BRILLO_ANTES = 0.6;       // brillo máximo (60%) que alcanza justo antes del segundo 33
 
 // GIF distinto para cada uno de los otros videos.
 // Pega la URL del gif entre las comillas. Si queda vacío ("") no se muestra nada.
@@ -437,7 +437,7 @@ var GIFS_OTROS = {
 var player = null;
 var playerListo = false;
 var videoActual = VIDEO_PRINCIPAL;
-var fase = 1;             // 0 = quieto, 1 = GIF lento, 2 = GIF normal (arranca en 0 al cargar la imagen)
+var gifActivo = true;     // se congela al cargar la imagen (ver más abajo)
 
 /* ---------- VIDEO ---------- */
 // Cargar la API de YouTube
@@ -465,47 +465,56 @@ function onYouTubeIframeAPIReady(){
 // brillo: 0 = totalmente oscuro, 1 = normal
 function aplicarBrillo(b){
   var f = "brightness(" + b + ")";
-  ["gif","gifFijo","gifRapido"].forEach(function(id){
-    document.getElementById(id).style.filter = f;
+  ["gif","gifFijo"].forEach(function(id){
+    var el = document.getElementById(id);
+    el.style.transition = "none";          // sin suavizado: el salto en el seg. 33 es de golpe
+    el.style.filter = f;
   });
 }
 
 // Todo sigue el segundo del video principal:
-//  - seg. 0 a 5:   GIF quieto (oscuro, aclarándose)
-//  - seg. 5 a 33:  GIF lento en movimiento, siguiendo con el fade
-//  - desde el 33:  GIF normal en movimiento, con brillo normal
+//  - seg. 0 a 5:    GIF quieto y totalmente oscuro
+//  - seg. 5 a 33:   GIF quieto, aclarándose de 0% a 60%
+//  - desde el 33:   GIF en movimiento y brillo 100% (de golpe)
 function actualizarGifPrincipal(){
   if(!playerListo || videoActual !== VIDEO_PRINCIPAL) return;
   var st = player.getPlayerState();
   if(st !== 1 && st !== 2) return;          // solo mientras reproduce o está en pausa
   var t = player.getCurrentTime();
-  aplicarBrillo(Math.min(1, t / DURACION_FADE).toFixed(3));
-  setFase(t >= DURACION_FADE ? 2 : (t >= INICIO_MOVIMIENTO ? 1 : 0));
+
+  var brillo;
+  if(t >= INICIO_MOVIMIENTO) brillo = 1;
+  else if(t <= INICIO_FADE)  brillo = 0;
+  else brillo = BRILLO_ANTES * (t - INICIO_FADE) / (INICIO_MOVIMIENTO - INICIO_FADE);
+
+  aplicarBrillo(brillo.toFixed(3));
+  estadoGif(t >= INICIO_MOVIMIENTO);
 }
 
-function setFase(n){
-  if(n === fase) return;
-  var lento  = document.getElementById("gif");
-  var fijo   = document.getElementById("gifFijo");
-  var rapido = document.getElementById("gifRapido");
+function estadoGif(activo){
+  var im = document.getElementById("gif");
+  var cv = document.getElementById("gifFijo");
+  if(activo === gifActivo) return;
 
-  // al quedar quieto, copiar el fotograma actual del GIF lento
-  if(n === 0 && fase === 1){
-    fijo.width  = lento.naturalWidth;
-    fijo.height = lento.naturalHeight;
-    fijo.getContext("2d").drawImage(lento, 0, 0);
+  if(activo){
+    cv.style.display = "none";
+    im.style.display = "";
+  } else {
+    // congelar: copiar el fotograma actual antes de ocultar el GIF
+    cv.width  = im.naturalWidth;
+    cv.height = im.naturalHeight;
+    cv.getContext("2d").drawImage(im, 0, 0);
+    im.style.display = "none";
+    cv.style.display = "";
   }
-  lento.style.display  = (n === 1) ? "" : "none";
-  fijo.style.display   = (n === 0) ? "" : "none";
-  rapido.style.display = (n === 2) ? "" : "none";
-  fase = n;
+  gifActivo = activo;
 }
 
 // Al abrir la página el GIF empieza quieto y completamente oscuro
 aplicarBrillo(0);
 (function(){
   var im = document.getElementById("gif");
-  function congelarInicial(){ setFase(0); }
+  function congelarInicial(){ estadoGif(false); }
   if(im.complete && im.naturalWidth) congelarInicial();
   else im.addEventListener("load", congelarInicial);
 })();
@@ -519,13 +528,13 @@ function mostrarGifsPara(id){
     otro.style.display = "none";
     principal.style.display = "";
     principal.style.visibility = "visible";
-    setFase(0);                // vuelve quieto...
+    estadoGif(false);          // vuelve quieto...
     aplicarBrillo(0);          // ...y oscuro, hasta que el video avance
     return;
   }
 
   // otros videos: el GIF principal se congela y se esconde
-  setFase(0);
+  estadoGif(false);
   var url = GIFS_OTROS[id];
   if(url){
     principal.style.display = "none";
