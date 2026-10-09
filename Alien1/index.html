@@ -418,12 +418,11 @@ html,body{
 <script>
 /* ---------- VIDEO ---------- */
 var VIDEO_PRINCIPAL = "fd3PJfv7SaY";
-var DEMORA_GIF = 33000;          // ms que tarda el GIF en moverse desde que el video empieza
+var DURACION_FADE = 33;         // segundos del video principal hasta que el GIF queda con brillo normal
 var player = null;
 var playerListo = false;
 var videoActual = VIDEO_PRINCIPAL;
 var gifActivo = true;           // se congela al cargar la imagen (ver más abajo)
-var temporizadorGif = null;
 
 // Cargar la API de YouTube
 (function(){
@@ -435,30 +434,37 @@ var temporizadorGif = null;
 function onYouTubeIframeAPIReady(){
   player = new YT.Player("visor", {
     events: {
-      onReady: function(){ playerListo = true; },
+      onReady: function(){
+        playerListo = true;
+        setInterval(actualizarBrillo, 250);
+      },
       onStateChange: cambioEstado
     }
   });
 }
 
 function cambioEstado(e){
-  // 1 = reproduciendo, 2 = pausa, 0 = terminado
+  // 1 = reproduciendo
   if(e.data === 1 && videoActual === VIDEO_PRINCIPAL){
-    if(!gifActivo && !temporizadorGif){
-      temporizadorGif = setTimeout(function(){
-        temporizadorGif = null;
-        if(videoActual === VIDEO_PRINCIPAL && player.getPlayerState() === 1){
-          estadoGif(true);
-        }
-      }, DEMORA_GIF);
-    }
-  } else if(e.data === 2 || e.data === 0){
-    cancelarTemporizador();
+    estadoGif(true);        // el GIF se mueve apenas el video principal empieza
+    actualizarBrillo();
   }
 }
 
-function cancelarTemporizador(){
-  if(temporizadorGif){ clearTimeout(temporizadorGif); temporizadorGif = null; }
+/* ---------- BRILLO DEL GIF (0 = totalmente oscuro, 1 = normal) ---------- */
+function aplicarBrillo(b){
+  var f = "brightness(" + b + ")";
+  document.getElementById("gif").style.filter = f;
+  document.getElementById("gifFijo").style.filter = f;
+}
+
+// El brillo sigue el minuto del video principal: segundo 0 = oscuro, segundo 33 = normal
+function actualizarBrillo(){
+  if(!playerListo || videoActual !== VIDEO_PRINCIPAL) return;
+  var st = player.getPlayerState();
+  if(st !== 1 && st !== 2) return;      // solo mientras reproduce o está en pausa
+  var p = Math.min(1, player.getCurrentTime() / DURACION_FADE);
+  aplicarBrillo(p.toFixed(3));
 }
 
 /* ---------- GIF (se mueve solo con el video principal) ---------- */
@@ -487,7 +493,8 @@ function estadoGif(activo, opaco){
   cv.style.opacity = opaco ? "0.35" : "1";
 }
 
-// Al abrir la página el GIF empieza quieto y SIN opacidad
+// Al abrir la página el GIF empieza quieto y completamente oscuro
+aplicarBrillo(0);
 (function(){
   var im = document.getElementById("gif");
   function congelarInicial(){ estadoGif(false, false); }
@@ -498,15 +505,13 @@ function estadoGif(activo, opaco){
 /* ---------- BOTONES ---------- */
 function cargarVideo(id){
   videoActual = id;
-  cancelarTemporizador();
   if(playerListo){
     player.loadVideoById(id);
   } else {
     document.getElementById("visor").src =
       "https://www.youtube.com/embed/" + id + "?autoplay=1&playsinline=1&enablejsapi=1";
   }
-  // el GIF se congela: opaco en los demás videos, sin opacidad en el principal
-  // (en el principal se vuelve a mover a los 5 s de que el video empiece)
+  // otros videos: GIF quieto y opaco. Principal: quieto hasta que el video empiece
   estadoGif(false, id !== VIDEO_PRINCIPAL);
 }
 
